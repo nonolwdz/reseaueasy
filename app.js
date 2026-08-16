@@ -91,14 +91,13 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (Méthode robuste sécurisée)
+// 7. RÉCUPÉRATION DES ANTENNES (Version optimisée sans Timeout)
 async function chercherAntennes(lat, lng) {
     const rayon = 10000; // 10 km
     
-    // L'URL officielle de l'ANFR avec ton resource_id exact
-    const urlANFR = `https://data.anfr.fr/d4c/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&resource_id=88ef0887-6b0f-4d3f-8545-6d64c8f597da&geofilter.distance=${lat},${lng},${rayon}&rows=100`;
+    // On demande 30 résultats au lieu de 100 pour éviter l'erreur de Timeout (408)
+    const urlANFR = `https://data.anfr.fr/d4c/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&resource_id=88ef0887-6b0f-4d3f-8545-6d64c8f597da&geofilter.distance=${lat},${lng},${rayon}&rows=30`;
     
-    // Utilisation du format sécurisé /get d'AllOrigins
     const url = `https://api.allorigins.win/get?url=${encodeURIComponent(urlANFR)}`;
 
     try {
