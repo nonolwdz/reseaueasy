@@ -1,0 +1,139 @@
+const map = L.map('map').setView([46.603354, 1.888334], 6);
+let markers = L.layerGroup().addTo(map);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap'
+}).addTo(map);
+
+// Logos des opérateurs
+function getIconOperateur(nomOperateur) {
+    const nom = (nomOperateur || "").toUpperCase();
+    let url = "";
+
+    if (nom.includes("ORANGE")) url = "https://upload.wikimedia.org/wikipedia/commons/c/c8/Orange_logo.svg";
+    else if (nom.includes("FREE")) url = "https://upload.wikimedia.org/wikipedia/commons/4/43/Free_Logo.svg";
+    else if (nom.includes("SFR")) url = "https://upload.wikimedia.org/wikipedia/commons/3/30/SFR_2022.svg";
+    else if (nom.includes("BOUYGUES")) url = "https://upload.wikimedia.org/wikipedia/commons/f/f6/Bouygues_Telecom_logo.svg";
+    else return null; 
+
+    return L.icon({ iconUrl: url, iconSize: [25, 25], className: 'logo-antenne' });
+}
+
+function lancerRecherche(lat, lng) {
+    map.setView([lat, lng], 13);
+    L.marker([lat, lng]).addTo(markers).bindPopup("<b>Centre de la recherche</b>").openPopup();
+    document.getElementById('antenna-info').innerHTML = "<i>Recherche des antennes dans un rayon de 10km...</i>";
+    chercherAntennes(lat, lng);
+}
+
+// 1. GÉOLOCALISATION CORRIGÉE
+document.getElementById('btn-geoloc').addEventListener('click', () => {
+    if ("geolocation" in navigator) {
+        document.getElementById('antenna-info').innerHTML = "<i>Recherche de votre position... (Acceptez la demande du navigateur)</i>";
+        navigator.geolocation.getCurrentPosition((position) => {
+            markers.clearLayers();
+            lancerRecherche(position.coords.latitude, position.coords.longitude);
+        }, (erreur) => {
+            document.getElementById('antenna-info').innerHTML = `<p style="color:red;">Erreur géolocalisation: ${erreur.message}. Tapez plutôt une adresse.</p>`;
+        });
+    } else {
+        alert("Géolocalisation non supportée par votre navigateur.");
+    }
+});
+
+// 2. SUGGESTIONS D'ADRESSES EN DIRECT
+const inputAdresse = document.getElementById('input-adresse');
+const datalist = document.getElementById('suggestions-lieux');
+
+inputAdresse.addEventListener('input', async (e) => {
+    const texte = e.target.value;
+    if (texte.length < 3) return; // Cherche à partir de 3 lettres
+
+    try {
+        const reponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${texte}&countrycodes=fr&limit=5`);
+        const lieux = await reponse.json();
+        
+        datalist.innerHTML = ""; // On vide les anciennes suggestions
+        lieux.forEach(lieu => {
+            const option = document.createElement('option');
+            option.value = lieu.display_name;
+            datalist.appendChild(option);
+        });
+    } catch (erreur) {
+        console.error("Erreur suggestions", erreur);
+    }
+});
+
+// Bouton recherche
+document.getElementById('btn-search').addEventListener('click', async () => {
+    const adresse = inputAdresse.value;
+    if (!adresse) return;
+
+    try {
+        const reponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${adresse}&limit=1`);
+        const donnees = await reponse.json();
+
+        if (donnees.length > 0) {
+            markers.clearLayers();
+            lancerRecherche(donnees[0].lat, donnees[0].lon);
+        } else {
+            document.getElementById('antenna-info').innerHTML = "<p>Adresse introuvable.</p>";
+        }
+    } catch (erreur) {
+        document.getElementById('antenna-info').innerHTML = "<p>Erreur lors de la recherche.</p>";
+    }
+});
+
+// 3. RÉCUPÉRATION DES ANTENNES (Rayon 10km)
+async function chercherAntennes(lat, lng) {
+    const rayon = 10000; // 10 km (idéal pour capter hors des grandes villes)
+    const url = `https://data.anfr.fr/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&geofilter.distance=${lat},${lng},${rayon}&rows=100`;
+
+    try {
+        const reponse = await fetch(url);
+        const donnees = await reponse.json();
+
+        if (donnees.records.length === 0) {
+            document.getElementById('antenna-info').innerHTML = "<p>Aucune antenne trouvée à moins de 10km. Vous êtes vraiment au calme !</p>";
+            return;
+        }
+
+        document.getElementById('antenna-info').innerHTML = `<i>${donnees.records.length} antennes trouvées ! Cliquez sur les logos.</i>`;
+
+        donnees.records.forEach(record => {
+            if(!record.fields.coordonnees) return;
+            
+            const antenneLat = record.fields.coordonnees[0];
+            const antenneLng = record.fields.coordonnees[1];
+            const operateur = record.fields.adm_lb_nom || "Inconnu";
+            const technologie = record.fields.generation || "";
+
+            // Analyse technique pour expliquer à l'utilisateur
+            let explicationTech = "";
+            if (technologie.includes("5G")) {
+                explicationTech = "⚡ <b>5G (3.5 GHz) :</b> Débit ultra-rapide, mais portée courte. L'antenne doit être proche et sans obstacles.";
+            } else if (technologie.includes("4G")) {
+                explicationTech = "🚀 <b>4G (700-2600 MHz) :</b> Excellent compromis. Si c'est du 700 MHz, ça passe très bien à travers les murs des maisons !";
+            } else if (technologie.includes("3G") || technologie.includes("2G")) {
+                explicationTech = "📞 <b>2G/3G :</b> Surtout utile pour les appels et SMS dans les zones reculées. Portée très longue.";
+            }
+
+            const icone = getIconOperateur(operateur);
+            let marqueur = icone ? L.marker([antenneLat, antenneLng], { icon: icone }).addTo(markers) 
+                                 : L.circleMarker([antenneLat, antenneLng], { color: "#888", radius: 8 }).addTo(markers);
+
+            marqueur.on('click', () => {
+                document.getElementById('antenna-info').innerHTML = `
+                    <h3 style="margin-top:0;">${operateur}</h3>
+                    <p><b>Réseaux actifs :</b> ${technologie || "Donnée indisponible"}</p>
+                    <p>${explicationTech}</p>
+                    <p><i>Statut : En service 🟢</i></p>
+                `;
+            });
+        });
+
+    } catch (erreur) {
+        document.getElementById('antenna-info').innerHTML = "<p style='color:red;'>Erreur de connexion à l'ANFR.</p>";
+    }
+}
