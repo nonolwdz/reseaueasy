@@ -91,10 +91,13 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (Nouvelle API V2.1 officielle)
+// 7. RÉCUPÉRATION DES ANTENNES (API Officielle V2.1 stricte et encodée)
 async function chercherAntennes(lat, lng) {
-    // La nouvelle adresse officielle de l'API de l'État (Opendatasoft V2.1)
-    const url = `https://data.anfr.fr/api/explore/v2.1/catalog/datasets/observatoire_2g_3g_4g/records?where=distance(coordonnees, geom'POINT(${lng} ${lat})', 10km)&limit=100`;
+    // 1. La nouvelle syntaxe V2.1 exige "within_distance" au lieu de "distance"
+    const clauseWhere = `within_distance(coordonnees, geom'POINT(${lng} ${lat})', 10km)`;
+    
+    // 2. On encode l'URL pour que les espaces et les caractères spéciaux soient bien digérés
+    const url = `https://data.anfr.fr/api/explore/v2.1/catalog/datasets/observatoire_2g_3g_4g/records?where=${encodeURIComponent(clauseWhere)}&limit=100`;
 
     try {
         const reponse = await fetch(url);
@@ -105,7 +108,7 @@ async function chercherAntennes(lat, lng) {
         
         const donnees = await reponse.json();
         
-        // Dans la nouvelle API, les données sont dans "results" et plus dans "records"
+        // 3. Les données sont dans "results" sur la v2.1
         const resultats = donnees.results || [];
 
         if (resultats.length === 0) {
@@ -118,11 +121,10 @@ async function chercherAntennes(lat, lng) {
         resultats.forEach(antenne => {
             if (!antenne.coordonnees) return;
             
-            // Gestion de la nouvelle structure des coordonnées
+            // Format des coordonnées dans Opendatasoft v2.1
             const antenneLat = antenne.coordonnees.lat !== undefined ? antenne.coordonnees.lat : antenne.coordonnees[0];
             const antenneLng = antenne.coordonnees.lon !== undefined ? antenne.coordonnees.lon : antenne.coordonnees[1];
             
-            // Les champs ne sont plus cachés dans ".fields"
             const operateur = antenne.adm_lb_nom || "Inconnu";
             const technologie = antenne.generation || "";
 
@@ -146,7 +148,6 @@ async function chercherAntennes(lat, lng) {
         });
 
     } catch (erreur) {
-        console.error(erreur);
-        document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur de connexion :</b> Impossible de charger les données de l'ANFR.</p>`;
+        document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur technique :</b> ${erreur.message}</p>`;
     }
 }
