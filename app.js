@@ -1,6 +1,6 @@
 // 1. INITIALISATION DE LA CARTE
-const map = L.map('map').setView([46.603354, 1.888334], 6); // Centré sur la France par défaut
-let markers = L.layerGroup().addTo(map); // Groupe pour gérer et effacer les antennes facilement
+const map = L.map('map').setView([46.603354, 1.888334], 6); // Centré sur la France
+let markers = L.layerGroup().addTo(map);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
@@ -25,7 +25,6 @@ function getIconOperateur(nomOperateur) {
 function lancerRecherche(lat, lng) {
     map.setView([lat, lng], 13);
     
-    // On marque le centre de la recherche
     L.marker([lat, lng]).addTo(markers).bindPopup("<b>Centre de la recherche</b>").openPopup();
     
     document.getElementById('antenna-info').innerHTML = "<i>Recherche des antennes dans un rayon de 10km...</i>";
@@ -35,9 +34,9 @@ function lancerRecherche(lat, lng) {
 // 4. GÉOLOCALISATION
 document.getElementById('btn-geoloc').addEventListener('click', () => {
     if ("geolocation" in navigator) {
-        document.getElementById('antenna-info').innerHTML = "<i>Recherche de votre position... (Acceptez la demande du navigateur)</i>";
+        document.getElementById('antenna-info').innerHTML = "<i>Recherche de votre position...</i>";
         navigator.geolocation.getCurrentPosition((position) => {
-            markers.clearLayers(); // On nettoie l'ancienne recherche
+            markers.clearLayers();
             lancerRecherche(position.coords.latitude, position.coords.longitude);
         }, (erreur) => {
             document.getElementById('antenna-info').innerHTML = `<p style="color:red;">Erreur géolocalisation: ${erreur.message}. Tapez plutôt une adresse.</p>`;
@@ -47,19 +46,19 @@ document.getElementById('btn-geoloc').addEventListener('click', () => {
     }
 });
 
-// 5. SUGGESTIONS D'ADRESSES EN DIRECT (Auto-complétion)
+// 5. SUGGESTIONS D'ADRESSES EN DIRECT
 const inputAdresse = document.getElementById('input-adresse');
 const datalist = document.getElementById('suggestions-lieux');
 
 inputAdresse.addEventListener('input', async (e) => {
     const texte = e.target.value;
-    if (texte.length < 3) return; // On cherche à partir de 3 lettres tapées
+    if (texte.length < 3) return;
 
     try {
         const reponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${texte}&countrycodes=fr&limit=5`);
         const lieux = await reponse.json();
         
-        datalist.innerHTML = ""; // On vide les anciennes suggestions
+        datalist.innerHTML = "";
         lieux.forEach(lieu => {
             const option = document.createElement('option');
             option.value = lieu.display_name;
@@ -92,22 +91,27 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (Solution infaillible avec proxy public)
+// 7. RÉCUPÉRATION DES ANTENNES (Nouveau Proxy stable AllOrigins)
 async function chercherAntennes(lat, lng) {
     const rayon = 10000; 
     
     // La vraie adresse de l'ANFR
     const urlANFR = `https://data.anfr.fr/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&geofilter.distance=${lat},${lng},${rayon}&rows=100`;
     
-    // Le proxy public gratuit (corsproxy.io) qui fait le relais !
-    const url = `https://corsproxy.io/?${encodeURIComponent(urlANFR)}`;
+    // Le nouveau proxy beaucoup plus stable
+    const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(urlANFR)}`;
 
     try {
         const reponse = await fetch(url);
         
-        if (!reponse.ok) throw new Error(`Erreur serveur ${reponse.status}`);
+        if (!reponse.ok) throw new Error(`Le proxy ou l'ANFR a planté (Code ${reponse.status})`);
         
         const donnees = await reponse.json();
+
+        // Si l'API répond mais que le format n'est pas bon
+        if (!donnees || !donnees.records) {
+            throw new Error("L'ANFR a répondu mais les données sont vides ou illisibles.");
+        }
 
         if (donnees.records.length === 0) {
             document.getElementById('antenna-info').innerHTML = "<p>Aucune antenne trouvée à moins de 10km.</p>";
@@ -144,6 +148,9 @@ async function chercherAntennes(lat, lng) {
         });
 
     } catch (erreur) {
-        document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur de connexion :</b> Impossible de charger les données.</p>`;
+        // Cette fois-ci, on affiche exactement la VRAIE erreur pour arrêter de deviner
+        document.getElementById('antenna-info').innerHTML = `
+            <p style='color:red;'><b>Erreur technique :</b> ${erreur.message}</p>
+        `;
     }
 }
