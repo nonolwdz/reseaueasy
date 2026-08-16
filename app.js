@@ -91,12 +91,15 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (Avec la Vraie API Data4Citizen de tes captures)
+// 7. RÉCUPÉRATION DES ANTENNES (URL exacte + Proxy anti-CORS)
 async function chercherAntennes(lat, lng) {
     const rayon = 10000; // 10 km
     
-    // L'URL exacte récupérée sur tes captures d'écran avec le filtre de distance
-    const url = `https://data.anfr.fr/d4c/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&resource_id=88ef0887-6b0f-4d3f-8545-6d64c8f597da&geofilter.distance=${lat},${lng},${rayon}&rows=100`;
+    // L'URL officielle récupérée de tes captures avec ton resource_id
+    const urlANFR = `https://data.anfr.fr/d4c/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&resource_id=88ef0887-6b0f-4d3f-8545-6d64c8f597da&geofilter.distance=${lat},${lng},${rayon}&rows=100`;
+    
+    // Contournement propre du blocage CORS du navigateur
+    const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(urlANFR)}`;
 
     try {
         const reponse = await fetch(url);
