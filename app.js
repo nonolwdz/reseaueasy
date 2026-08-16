@@ -1,12 +1,13 @@
-const map = L.map('map').setView([46.603354, 1.888334], 6);
-let markers = L.layerGroup().addTo(map);
+// 1. INITIALISATION DE LA CARTE
+const map = L.map('map').setView([46.603354, 1.888334], 6); // Centré sur la France par défaut
+let markers = L.layerGroup().addTo(map); // Groupe pour gérer et effacer les antennes facilement
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '© OpenStreetMap'
 }).addTo(map);
 
-// Logos des opérateurs
+// 2. LOGOS DES OPÉRATEURS
 function getIconOperateur(nomOperateur) {
     const nom = (nomOperateur || "").toUpperCase();
     let url = "";
@@ -20,19 +21,23 @@ function getIconOperateur(nomOperateur) {
     return L.icon({ iconUrl: url, iconSize: [25, 25], className: 'logo-antenne' });
 }
 
+// 3. FONCTION COMMUNE POUR LANCER LA RECHERCHE
 function lancerRecherche(lat, lng) {
     map.setView([lat, lng], 13);
+    
+    // On marque le centre de la recherche
     L.marker([lat, lng]).addTo(markers).bindPopup("<b>Centre de la recherche</b>").openPopup();
+    
     document.getElementById('antenna-info').innerHTML = "<i>Recherche des antennes dans un rayon de 10km...</i>";
     chercherAntennes(lat, lng);
 }
 
-// 1. GÉOLOCALISATION CORRIGÉE
+// 4. GÉOLOCALISATION
 document.getElementById('btn-geoloc').addEventListener('click', () => {
     if ("geolocation" in navigator) {
         document.getElementById('antenna-info').innerHTML = "<i>Recherche de votre position... (Acceptez la demande du navigateur)</i>";
         navigator.geolocation.getCurrentPosition((position) => {
-            markers.clearLayers();
+            markers.clearLayers(); // On nettoie l'ancienne recherche
             lancerRecherche(position.coords.latitude, position.coords.longitude);
         }, (erreur) => {
             document.getElementById('antenna-info').innerHTML = `<p style="color:red;">Erreur géolocalisation: ${erreur.message}. Tapez plutôt une adresse.</p>`;
@@ -42,13 +47,13 @@ document.getElementById('btn-geoloc').addEventListener('click', () => {
     }
 });
 
-// 2. SUGGESTIONS D'ADRESSES EN DIRECT
+// 5. SUGGESTIONS D'ADRESSES EN DIRECT (Auto-complétion)
 const inputAdresse = document.getElementById('input-adresse');
 const datalist = document.getElementById('suggestions-lieux');
 
 inputAdresse.addEventListener('input', async (e) => {
     const texte = e.target.value;
-    if (texte.length < 3) return; // Cherche à partir de 3 lettres
+    if (texte.length < 3) return; // On cherche à partir de 3 lettres tapées
 
     try {
         const reponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${texte}&countrycodes=fr&limit=5`);
@@ -61,14 +66,16 @@ inputAdresse.addEventListener('input', async (e) => {
             datalist.appendChild(option);
         });
     } catch (erreur) {
-        console.error("Erreur suggestions", erreur);
+        console.error("Erreur avec les suggestions :", erreur);
     }
 });
 
-// Bouton recherche
+// 6. BOUTON DE RECHERCHE D'ADRESSE
 document.getElementById('btn-search').addEventListener('click', async () => {
     const adresse = inputAdresse.value;
     if (!adresse) return;
+
+    document.getElementById('antenna-info').innerHTML = "<i>Recherche de l'adresse en cours...</i>";
 
     try {
         const reponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${adresse}&limit=1`);
@@ -81,11 +88,11 @@ document.getElementById('btn-search').addEventListener('click', async () => {
             document.getElementById('antenna-info').innerHTML = "<p>Adresse introuvable.</p>";
         }
     } catch (erreur) {
-        document.getElementById('antenna-info').innerHTML = "<p>Erreur lors de la recherche.</p>";
+        document.getElementById('antenna-info').innerHTML = "<p>Erreur lors de la recherche de l'adresse.</p>";
     }
 });
 
-// 3. RÉCUPÉRATION DES ANTENNES (Avec détection d'erreur avancée)
+// 7. RÉCUPÉRATION DES ANTENNES ANFR (Avec détection d'erreur avancée)
 async function chercherAntennes(lat, lng) {
     const rayon = 10000; 
     const url = `https://data.anfr.fr/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&geofilter.distance=${lat},${lng},${rayon}&rows=100`;
@@ -95,14 +102,12 @@ async function chercherAntennes(lat, lng) {
         
         const reponse = await fetch(url);
         
-        // Si le serveur répond, mais avec une erreur (ex: 404 introuvable)
         if (!reponse.ok) {
             throw new Error(`Le serveur de l'ANFR a répondu avec une erreur ${reponse.status}`);
         }
 
         const donnees = await reponse.json();
 
-        // Si la structure des données a changé ou est introuvable
         if (!donnees.records) {
             throw new Error("L'ANFR a répondu, mais les données sont vides ou ont changé de format.");
         }
@@ -112,7 +117,7 @@ async function chercherAntennes(lat, lng) {
             return;
         }
 
-        document.getElementById('antenna-info').innerHTML = `<i>${donnees.records.length} antennes trouvées ! Cliquez sur les logos.</i>`;
+        document.getElementById('antenna-info').innerHTML = `<i>${donnees.records.length} antennes trouvées ! Cliquez sur les logos sur la carte.</i>`;
 
         donnees.records.forEach(record => {
             if(!record.fields || !record.fields.coordonnees) return;
@@ -149,36 +154,7 @@ async function chercherAntennes(lat, lng) {
         console.error("Détail de l'erreur :", erreur);
         document.getElementById('antenna-info').innerHTML = `
             <p style='color:red;'><b>Erreur de connexion :</b> ${erreur.message}</p>
-            <p style='font-size: 0.8em;'><i>Si l'erreur dit "Failed to fetch", essaie de désactiver ton bloqueur de pub ou de publier le site sur Netlify.</i></p>
+            <p style='font-size: 0.8em;'><i>Si l'erreur dit "Failed to fetch", essaie de publier le site sur Netlify ou désactive ton bloqueur de publicités.</i></p>
         `;
-    }
-}
-
-            // Analyse technique pour expliquer à l'utilisateur
-            let explicationTech = "";
-            if (technologie.includes("5G")) {
-                explicationTech = "⚡ <b>5G (3.5 GHz) :</b> Débit ultra-rapide, mais portée courte. L'antenne doit être proche et sans obstacles.";
-            } else if (technologie.includes("4G")) {
-                explicationTech = "🚀 <b>4G (700-2600 MHz) :</b> Excellent compromis. Si c'est du 700 MHz, ça passe très bien à travers les murs des maisons !";
-            } else if (technologie.includes("3G") || technologie.includes("2G")) {
-                explicationTech = "📞 <b>2G/3G :</b> Surtout utile pour les appels et SMS dans les zones reculées. Portée très longue.";
-            }
-
-            const icone = getIconOperateur(operateur);
-            let marqueur = icone ? L.marker([antenneLat, antenneLng], { icon: icone }).addTo(markers) 
-                                 : L.circleMarker([antenneLat, antenneLng], { color: "#888", radius: 8 }).addTo(markers);
-
-            marqueur.on('click', () => {
-                document.getElementById('antenna-info').innerHTML = `
-                    <h3 style="margin-top:0;">${operateur}</h3>
-                    <p><b>Réseaux actifs :</b> ${technologie || "Donnée indisponible"}</p>
-                    <p>${explicationTech}</p>
-                    <p><i>Statut : En service 🟢</i></p>
-                `;
-            });
-        });
-
-    } catch (erreur) {
-        document.getElementById('antenna-info').innerHTML = "<p style='color:red;'>Erreur de connexion à l'ANFR.</p>";
     }
 }
