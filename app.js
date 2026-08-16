@@ -1,5 +1,5 @@
 // 1. INITIALISATION DE LA CARTE
-const map = L.map('map').setView([46.603354, 1.888334], 6); // Centré sur la France
+const map = L.map('map').setView([46.603354, 1.888334], 6);
 let markers = L.layerGroup().addTo(map);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -91,29 +91,22 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (Nouveau Proxy stable AllOrigins)
-async function chercherAntennes(lat, lng) {
+// 7. RÉCUPÉRATION DES ANTENNES (Technique JSONP anti-blocage)
+function chercherAntennes(lat, lng) {
     const rayon = 10000; 
     
-    // La vraie adresse de l'ANFR
-    const urlANFR = `https://data.anfr.fr/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&geofilter.distance=${lat},${lng},${rayon}&rows=100`;
+    // On crée un nom de fonction unique pour la requête
+    const callbackName = 'anfrCallback_' + Math.round(100000 * Math.random());
     
-    // Le nouveau proxy beaucoup plus stable
-    const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(urlANFR)}`;
-
-    try {
-        const reponse = await fetch(url);
+    // L'URL de l'ANFR avec le paramètre magique "jsonp"
+    const urlANFR = `https://data.anfr.fr/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&geofilter.distance=${lat},${lng},${rayon}&rows=100&jsonp=${callbackName}`;
+    
+    // On prépare la fonction qui va attraper les données quand elles arriveront
+    window[callbackName] = function(donnees) {
+        // On nettoie la fonction une fois qu'elle a servi
+        delete window[callbackName];
         
-        if (!reponse.ok) throw new Error(`Le proxy ou l'ANFR a planté (Code ${reponse.status})`);
-        
-        const donnees = await reponse.json();
-
-        // Si l'API répond mais que le format n'est pas bon
-        if (!donnees || !donnees.records) {
-            throw new Error("L'ANFR a répondu mais les données sont vides ou illisibles.");
-        }
-
-        if (donnees.records.length === 0) {
+        if (!donnees || !donnees.records || donnees.records.length === 0) {
             document.getElementById('antenna-info').innerHTML = "<p>Aucune antenne trouvée à moins de 10km.</p>";
             return;
         }
@@ -146,11 +139,16 @@ async function chercherAntennes(lat, lng) {
                 `;
             });
         });
+    };
 
-    } catch (erreur) {
-        // Cette fois-ci, on affiche exactement la VRAIE erreur pour arrêter de deviner
-        document.getElementById('antenna-info').innerHTML = `
-            <p style='color:red;'><b>Erreur technique :</b> ${erreur.message}</p>
-        `;
-    }
+    // On injecte le script dans la page (ça passe à travers tous les blocages CORS)
+    const script = document.createElement('script');
+    script.src = urlANFR;
+    
+    // Si même ça c'est bloqué, c'est que ton réseau ou pare-feu interdit l'accès au site de l'État
+    script.onerror = function() {
+        document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur réseau :</b> Impossible de joindre l'ANFR. Ton pare-feu ou antivirus bloque le site de l'État.</p>`;
+    };
+    
+    document.body.appendChild(script);
 }
