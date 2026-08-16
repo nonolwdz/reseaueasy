@@ -7,18 +7,14 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap'
 }).addTo(map);
 
-// 2. LOGOS DES OPÉRATEURS
-function getIconOperateur(nomOperateur) {
+// 2. COULEURS OFFICIELLES PAR OPÉRATEUR (Infaillible, pas de bug d'image)
+function getCouleurOperateur(nomOperateur) {
     const nom = (nomOperateur || "").toUpperCase();
-    let url = "";
-
-    if (nom.includes("ORANGE")) url = "https://upload.wikimedia.org/wikipedia/commons/c/c8/Orange_logo.svg";
-    else if (nom.includes("FREE")) url = "https://upload.wikimedia.org/wikipedia/commons/4/43/Free_Logo.svg";
-    else if (nom.includes("SFR")) url = "https://upload.wikimedia.org/wikipedia/commons/3/30/SFR_2022.svg";
-    else if (nom.includes("BOUYGUES")) url = "https://upload.wikimedia.org/wikipedia/commons/f/f6/Bouygues_Telecom_logo.svg";
-    else return null; 
-
-    return L.icon({ iconUrl: url, iconSize: [25, 25], className: 'logo-antenne' });
+    if (nom.includes("ORANGE")) return "#ff7900";   // Orange
+    if (nom.includes("FREE")) return "#e2001a";     // Rouge Free
+    if (nom.includes("SFR")) return "#ea0000";      // Rouge SFR
+    if (nom.includes("BOUYGUES")) return "#004b93"; // Bleu Bouygues
+    return "#888888";                               // Gris par défaut
 }
 
 // 3. FONCTION COMMUNE POUR LANCER LA RECHERCHE
@@ -91,15 +87,14 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (Via la Netlify Function)
+// 7. RÉCUPÉRATION DES ANTENNES (Via Netlify Function + Affichage Garanti)
 async function chercherAntennes(lat, lng) {
-    document.getElementById('antenna-info').innerHTML = "<i>Chargement des antennes via le serveur sécurisé...</i>";
+    document.getElementById('antenna-info').innerHTML = "<i>Chargement des antennes...</i>";
     
     const url = `/.netlify/functions/anfr?lat=${lat}&lng=${lng}`;
 
     try {
         const reponse = await fetch(url);
-        
         if (!reponse.ok) throw new Error(`Erreur serveur ${reponse.status}`);
         
         const donnees = await reponse.json();
@@ -109,13 +104,25 @@ async function chercherAntennes(lat, lng) {
             return;
         }
 
-        document.getElementById('antenna-info').innerHTML = `<i>${donnees.records.length} antennes trouvées ! Cliquez sur les logos.</i>`;
+        document.getElementById('antenna-info').innerHTML = `<i>${donnees.records.length} antennes affichées ! Cliquez dessus.</i>`;
 
         donnees.records.forEach(record => {
-            if(!record.fields || !record.fields.coordonnees) return;
+            if (!record.fields) return;
             
-            const antenneLat = record.fields.coordonnees[0];
-            const antenneLng = record.fields.coordonnees[1];
+            // Extraction robuste des coordonnées (gère tous les formats possibles)
+            let antenneLat = null;
+            let antenneLng = null;
+
+            if (Array.isArray(record.fields.coordonnees)) {
+                antenneLat = record.fields.coordonnees[0];
+                antenneLng = record.fields.coordonnees[1];
+            } else if (record.fields.geo_point_2d) {
+                antenneLat = record.fields.geo_point_2d.lat;
+                antenneLng = record.fields.geo_point_2d.lon;
+            }
+
+            if (!antenneLat || !antenneLng) return;
+
             const operateur = record.fields.adm_lb_nom || "Inconnu";
             const technologie = record.fields.generation || "";
 
@@ -124,13 +131,20 @@ async function chercherAntennes(lat, lng) {
             else if (technologie.includes("4G")) explicationTech = "🚀 <b>4G :</b> Excellent compromis, bonne pénétration des murs.";
             else explicationTech = "📞 <b>2G/3G :</b> Utile pour les appels. Portée très longue.";
 
-            const icone = getIconOperateur(operateur);
-            let marqueur = icone ? L.marker([antenneLat, antenneLng], { icon: icone }).addTo(markers) 
-                                 : L.circleMarker([antenneLat, antenneLng], { color: "#888", radius: 8 }).addTo(markers);
+            // Création d'un cercle coloré très visible sur la carte
+            const couleur = getCouleurOperateur(operateur);
+            const marqueur = L.circleMarker([antenneLat, antenneLng], {
+                color: '#ffffff',      // Bordure blanche
+                fillColor: couleur,    // Couleur de l'opérateur
+                fillOpacity: 0.9,
+                radius: 8,
+                weight: 2
+            }).addTo(markers);
 
+            // Au clic sur l'antenne, affichage des infos dans le panneau
             marqueur.on('click', () => {
                 document.getElementById('antenna-info').innerHTML = `
-                    <h3 style="margin-top:0;">${operateur}</h3>
+                    <h3 style="margin-top:0; color:${couleur};">${operateur}</h3>
                     <p><b>Réseaux actifs :</b> ${technologie}</p>
                     <p>${explicationTech}</p>
                     <p><i>Statut : En service 🟢</i></p>
