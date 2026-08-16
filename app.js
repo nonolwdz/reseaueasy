@@ -1,5 +1,5 @@
 // 1. INITIALISATION DE LA CARTE
-const map = L.map('map').setView([46.603354, 1.888334], 6);
+const map = L.map('map').setView([46.4704, 2.4357], 13); 
 let markers = L.layerGroup().addTo(map);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -91,47 +91,45 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (API Officielle V2.1 stricte et encodée)
+// 7. RÉCUPÉRATION DES ANTENNES (API Alternative stable : OpenStreetMap)
 async function chercherAntennes(lat, lng) {
-    // 1. La nouvelle syntaxe V2.1 exige "within_distance" au lieu de "distance"
-    const clauseWhere = `within_distance(coordonnees, geom'POINT(${lng} ${lat})', 10km)`;
+    const rayon = 10000; 
     
-    // 2. On encode l'URL pour que les espaces et les caractères spéciaux soient bien digérés
-    const url = `https://data.anfr.fr/api/explore/v2.1/catalog/datasets/observatoire_2g_3g_4g/records?where=${encodeURIComponent(clauseWhere)}&limit=100`;
+    // Requête spécifique pour trouver les antennes mobiles sur OpenStreetMap
+    const query = `
+        [out:json][timeout:25];
+        (
+          node["telecom"="antenna"](around:${rayon},${lat},${lng});
+          node["man_made"="mast"]["communication:mobile_phone"="yes"](around:${rayon},${lat},${lng});
+          node["man_made"="mast"]["tower:type"="communication"](around:${rayon},${lat},${lng});
+        );
+        out body;
+    `;
+    
+    const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
 
     try {
         const reponse = await fetch(url);
         
-        if (!reponse.ok) {
-            throw new Error(`L'API a répondu avec une erreur ${reponse.status}`);
-        }
+        if (!reponse.ok) throw new Error(`Erreur réseau ${reponse.status}`);
         
         const donnees = await reponse.json();
-        
-        // 3. Les données sont dans "results" sur la v2.1
-        const resultats = donnees.results || [];
 
-        if (resultats.length === 0) {
+        if (!donnees.elements || donnees.elements.length === 0) {
             document.getElementById('antenna-info').innerHTML = "<p>Aucune antenne trouvée à moins de 10km.</p>";
             return;
         }
 
-        document.getElementById('antenna-info').innerHTML = `<i>${resultats.length} antennes trouvées ! Cliquez sur les logos.</i>`;
+        document.getElementById('antenna-info').innerHTML = `<i>${donnees.elements.length} antennes trouvées ! Cliquez sur les logos.</i>`;
 
-        resultats.forEach(antenne => {
-            if (!antenne.coordonnees) return;
+        donnees.elements.forEach(element => {
+            const antenneLat = element.lat;
+            const antenneLng = element.lon;
+            const tags = element.tags || {};
             
-            // Format des coordonnées dans Opendatasoft v2.1
-            const antenneLat = antenne.coordonnees.lat !== undefined ? antenne.coordonnees.lat : antenne.coordonnees[0];
-            const antenneLng = antenne.coordonnees.lon !== undefined ? antenne.coordonnees.lon : antenne.coordonnees[1];
-            
-            const operateur = antenne.adm_lb_nom || "Inconnu";
-            const technologie = antenne.generation || "";
-
-            let explicationTech = "";
-            if (technologie.includes("5G")) explicationTech = "⚡ <b>5G (3.5 GHz) :</b> Débit ultra-rapide, mais portée courte.";
-            else if (technologie.includes("4G")) explicationTech = "🚀 <b>4G :</b> Excellent compromis, bonne pénétration des murs.";
-            else explicationTech = "📞 <b>2G/3G :</b> Utile pour les appels. Portée très longue.";
+            // Sur OpenStreetMap, l'opérateur est stocké dans le tag "operator"
+            const operateur = tags.operator || "Opérateur inconnu";
+            let explicationTech = "📞 <b>Réseau Mobile :</b> Antenne recensée par la communauté. Idéal pour capter le réseau.";
 
             const icone = getIconOperateur(operateur);
             let marqueur = icone ? L.marker([antenneLat, antenneLng], { icon: icone }).addTo(markers) 
@@ -140,9 +138,8 @@ async function chercherAntennes(lat, lng) {
             marqueur.on('click', () => {
                 document.getElementById('antenna-info').innerHTML = `
                     <h3 style="margin-top:0;">${operateur}</h3>
-                    <p><b>Réseaux actifs :</b> ${technologie}</p>
                     <p>${explicationTech}</p>
-                    <p><i>Statut : En service 🟢</i></p>
+                    <p><i>Statut : En service 🟢 (Source OSM)</i></p>
                 `;
             });
         });
