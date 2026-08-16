@@ -91,11 +91,10 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (Via la Netlify Function anti-CORS)
+// 7. RÉCUPÉRATION DES ANTENNES (Via la Netlify Function)
 async function chercherAntennes(lat, lng) {
     document.getElementById('antenna-info').innerHTML = "<i>Chargement des antennes via le serveur sécurisé...</i>";
     
-    // On appelle notre propre fonction Netlify créée à l'étape 1
     const url = `/.netlify/functions/anfr?lat=${lat}&lng=${lng}`;
 
     try {
@@ -140,10 +139,6 @@ async function chercherAntennes(lat, lng) {
         });
 
     } catch (erreur) {
-        console.error("Erreur technique:", erreur);
-        document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur technique :</b> ${erreur.message}</p>`;
-    }
-}
         console.error("Erreur technique:", erreur);
         document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur technique :</b> ${erreur.message}</p>`;
     }
