@@ -91,22 +91,24 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (URL exacte + Proxy anti-CORS)
+// 7. RÉCUPÉRATION DES ANTENNES (Méthode robuste sécurisée)
 async function chercherAntennes(lat, lng) {
     const rayon = 10000; // 10 km
     
-    // L'URL officielle récupérée de tes captures avec ton resource_id
+    // L'URL officielle de l'ANFR avec ton resource_id exact
     const urlANFR = `https://data.anfr.fr/d4c/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&resource_id=88ef0887-6b0f-4d3f-8545-6d64c8f597da&geofilter.distance=${lat},${lng},${rayon}&rows=100`;
     
-    // Contournement propre du blocage CORS du navigateur
-    const url = `https://api.allorigins.win/raw?url=${encodeURIComponent(urlANFR)}`;
+    // Utilisation du format sécurisé /get d'AllOrigins
+    const url = `https://api.allorigins.win/get?url=${encodeURIComponent(urlANFR)}`;
 
     try {
         const reponse = await fetch(url);
+        if (!reponse.ok) throw new Error(`Erreur HTTP ${reponse.status}`);
         
-        if (!reponse.ok) throw new Error(`Erreur serveur ${reponse.status}`);
+        const wrapper = await reponse.json();
+        if (!wrapper.contents) throw new Error("Contenu vide reçu du serveur.");
         
-        const donnees = await reponse.json();
+        const donnees = JSON.parse(wrapper.contents);
 
         if (!donnees.records || donnees.records.length === 0) {
             document.getElementById('antenna-info').innerHTML = "<p>Aucune antenne trouvée à moins de 10km.</p>";
@@ -143,7 +145,7 @@ async function chercherAntennes(lat, lng) {
         });
 
     } catch (erreur) {
-        console.error(erreur);
-        document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur technique :</b> Impossible de charger les données.</p>`;
+        console.error("Erreur technique:", erreur);
+        document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur technique :</b> ${erreur.message}</p>`;
     }
 }
