@@ -7,14 +7,14 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap'
 }).addTo(map);
 
-// 2. COULEURS OFFICIELLES PAR OPÉRATEUR (Infaillible, pas de bug d'image)
+// 2. COULEURS PAR OPÉRATEUR
 function getCouleurOperateur(nomOperateur) {
     const nom = (nomOperateur || "").toUpperCase();
     if (nom.includes("ORANGE")) return "#ff7900";   // Orange
     if (nom.includes("FREE")) return "#e2001a";     // Rouge Free
     if (nom.includes("SFR")) return "#ea0000";      // Rouge SFR
     if (nom.includes("BOUYGUES")) return "#004b93"; // Bleu Bouygues
-    return "#888888";                               // Gris par défaut
+    return "#888888";                               // Gris
 }
 
 // 3. FONCTION COMMUNE POUR LANCER LA RECHERCHE
@@ -87,7 +87,7 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (Via Netlify Function + Affichage Garanti)
+// 7. RÉCUPÉRATION DES ANTENNES (Avec lecture robuste des coordonnées)
 async function chercherAntennes(lat, lng) {
     document.getElementById('antenna-info').innerHTML = "<i>Chargement des antennes...</i>";
     
@@ -104,44 +104,49 @@ async function chercherAntennes(lat, lng) {
             return;
         }
 
-        document.getElementById('antenna-info').innerHTML = `<i>${donnees.records.length} antennes affichées ! Cliquez dessus.</i>`;
+        let antennesAffichees = 0;
 
         donnees.records.forEach(record => {
-            if (!record.fields) return;
-            
-            // Extraction robuste des coordonnées (gère tous les formats possibles)
             let antenneLat = null;
             let antenneLng = null;
 
-            if (Array.isArray(record.fields.coordonnees)) {
-                antenneLat = record.fields.coordonnees[0];
-                antenneLng = record.fields.coordonnees[1];
-            } else if (record.fields.geo_point_2d) {
-                antenneLat = record.fields.geo_point_2d.lat;
-                antenneLng = record.fields.geo_point_2d.lon;
+            // Analyse robuste de toutes les formes possibles de coordonnées dans l'API ANFR
+            if (record.geometry && record.geometry.coordinates) {
+                // Format GeoJSON standard : [longitude, latitude]
+                antenneLng = record.geometry.coordinates[0];
+                antenneLat = record.geometry.coordinates[1];
+            } else if (record.fields) {
+                if (Array.isArray(record.fields.coordonnees)) {
+                    antenneLat = record.fields.coordonnees[0];
+                    antenneLng = record.fields.coordonnees[1];
+                } else if (record.fields.geo_point_2d) {
+                    antenneLat = record.fields.geo_point_2d.lat;
+                    antenneLng = record.fields.geo_point_2d.lon;
+                }
             }
 
             if (!antenneLat || !antenneLng) return;
 
-            const operateur = record.fields.adm_lb_nom || "Inconnu";
-            const technologie = record.fields.generation || "";
+            antennesAffichees++;
+
+            const fields = record.fields || {};
+            const operateur = fields.adm_lb_nom || "Inconnu";
+            const technologie = fields.generation || "";
 
             let explicationTech = "";
             if (technologie.includes("5G")) explicationTech = "⚡ <b>5G (3.5 GHz) :</b> Débit ultra-rapide, mais portée courte.";
             else if (technologie.includes("4G")) explicationTech = "🚀 <b>4G :</b> Excellent compromis, bonne pénétration des murs.";
             else explicationTech = "📞 <b>2G/3G :</b> Utile pour les appels. Portée très longue.";
 
-            // Création d'un cercle coloré très visible sur la carte
             const couleur = getCouleurOperateur(operateur);
             const marqueur = L.circleMarker([antenneLat, antenneLng], {
-                color: '#ffffff',      // Bordure blanche
-                fillColor: couleur,    // Couleur de l'opérateur
+                color: '#ffffff',
+                fillColor: couleur,
                 fillOpacity: 0.9,
                 radius: 8,
                 weight: 2
             }).addTo(markers);
 
-            // Au clic sur l'antenne, affichage des infos dans le panneau
             marqueur.on('click', () => {
                 document.getElementById('antenna-info').innerHTML = `
                     <h3 style="margin-top:0; color:${couleur};">${operateur}</h3>
@@ -151,6 +156,8 @@ async function chercherAntennes(lat, lng) {
                 `;
             });
         });
+
+        document.getElementById('antenna-info').innerHTML = `<i>${antennesAffichees} antennes affichées sur la carte ! Cliquez dessus.</i>`;
 
     } catch (erreur) {
         console.error("Erreur technique:", erreur);
