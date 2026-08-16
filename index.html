@@ -6,107 +6,10 @@
     <title>Mon Réseau Mobile</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
-    <style>
-        :root {
-            --bg-color: #121212;
-            --panel-bg: #1e1e1e;
-            --text-main: #e0e0e0;
-            --accent-color: #00ffcc;
-            --accent-hover: #00ccaa;
-        }
-
-        body {
-            margin: 0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            display: flex;
-            height: 100vh;
-        }
-
-        #sidebar {
-            width: 350px;
-            background-color: var(--panel-bg);
-            padding: 20px;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
-            display: flex;
-            flex-direction: column;
-            z-index: 1000;
-        }
-
-        h1 {
-            font-size: 1.5rem;
-            color: var(--accent-color);
-            margin-top: 0;
-        }
-
-        /* Style pour la barre de recherche */
-        .search-container {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-
-        input[type="text"] {
-            flex-grow: 1;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #444;
-            background-color: #2a2a2a;
-            color: white;
-        }
-
-        .info-box {
-            background-color: #2a2a2a;
-            border-radius: 8px;
-            padding: 15px;
-            margin-top: 20px;
-            font-size: 0.9rem;
-        }
-
-        button {
-            background-color: var(--accent-color);
-            color: #000;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 5px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: 0.3s;
-            width: 100%;
-            margin-top: 15px;
-        }
-
-        .search-container button {
-            width: auto;
-            margin-top: 0;
-        }
-
-        button:hover {
-            background-color: var(--accent-hover);
-        }
-
-        #map {
-            flex-grow: 1;
-            height: 100%;
-        }
-
-        .leaflet-layer,
-        .leaflet-control-zoom-in,
-        .leaflet-control-zoom-out,
-        .leaflet-control-attribution {
-            filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
-        }
-        
-        /* Petit style pour les logos sur la carte */
-        .logo-antenne {
-            background-color: white;
-            border-radius: 50%;
-            padding: 2px;
-            border: 2px solid #333;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css" />
+    
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -116,139 +19,34 @@
         
         <button id="btn-geoloc">📍 Me géolocaliser</button>
         
-        <!-- Nouvelle barre de recherche -->
+        <!-- Recherche avec suggestions -->
         <div class="search-container">
-            <input type="text" id="input-adresse" placeholder="Ex: Paris, Lyon..." />
+            <input type="text" id="input-adresse" list="suggestions-lieux" placeholder="Ex: Lyon, Paris..." autocomplete="off" />
+            <datalist id="suggestions-lieux"></datalist>
             <button id="btn-search">🔍</button>
         </div>
         
         <div class="info-box" id="antenna-info">
             <i>Localisez-vous ou cherchez une adresse pour voir les antennes.</i>
         </div>
+
+        <!-- Section Compte -->
+        <div class="account-section">
+            <h3 id="user-status">Non connecté</h3>
+            <div id="auth-forms">
+                <input type="email" id="email" placeholder="Email" />
+                <input type="password" id="password" placeholder="Mot de passe" />
+                <button id="btn-login">Connexion</button>
+                <button id="btn-signup" style="background-color: #444; color: white;">Créer un compte</button>
+            </div>
+            <button id="btn-logout" style="display: none; background-color: #E2001A; color: white;">Se déconnecter</button>
+        </div>
     </div>
 
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script>
-        const map = L.map('map').setView([46.603354, 1.888334], 6);
-        let markers = L.layerGroup().addTo(map); // Groupe pour pouvoir effacer les anciennes antennes
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap'
-        }).addTo(map);
-
-        // -- NOUVEAU : Création des icônes pour les logos --
-        function getIconOperateur(nomOperateur) {
-            const nom = (nomOperateur || "").toUpperCase();
-            let url = "";
-
-            if (nom.includes("ORANGE")) url = "https://upload.wikimedia.org/wikipedia/commons/c/c8/Orange_logo.svg";
-            else if (nom.includes("FREE")) url = "https://upload.wikimedia.org/wikipedia/commons/4/43/Free_Logo.svg";
-            else if (nom.includes("SFR")) url = "https://upload.wikimedia.org/wikipedia/commons/3/30/SFR_2022.svg";
-            else if (nom.includes("BOUYGUES")) url = "https://upload.wikimedia.org/wikipedia/commons/f/f6/Bouygues_Telecom_logo.svg";
-            else return null; // Retourne null si on n'a pas de logo, on fera un cercle classique
-
-            return L.icon({
-                iconUrl: url,
-                iconSize: [25, 25],
-                className: 'logo-antenne'
-            });
-        }
-
-        // Fonction commune pour recentrer la carte et chercher les antennes
-        function lancerRecherche(lat, lng) {
-            map.setView([lat, lng], 14);
-            L.marker([lat, lng]).addTo(markers).bindPopup("<b>Lieu recherché</b>").openPopup();
-            document.getElementById('antenna-info').innerHTML = "<i>Recherche des antennes en cours...</i>";
-            chercherAntennes(lat, lng);
-        }
-
-        // Géolocalisation
-        document.getElementById('btn-geoloc').addEventListener('click', () => {
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition((position) => {
-                    markers.clearLayers(); // Efface les anciens points
-                    lancerRecherche(position.coords.latitude, position.coords.longitude);
-                }, () => {
-                    alert("Impossible de vous localiser.");
-                });
-            }
-        });
-
-        // -- NOUVEAU : Recherche par adresse (API Nominatim) --
-        document.getElementById('btn-search').addEventListener('click', async () => {
-            const adresse = document.getElementById('input-adresse').value;
-            if (!adresse) return;
-
-            document.getElementById('antenna-info').innerHTML = "<i>Recherche de l'adresse...</i>";
-            
-            try {
-                const reponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${adresse}`);
-                const donnees = await reponse.json();
-
-                if (donnees.length > 0) {
-                    markers.clearLayers(); // Efface les anciens points
-                    const lat = donnees[0].lat;
-                    const lng = donnees[0].lon;
-                    lancerRecherche(lat, lng);
-                } else {
-                    document.getElementById('antenna-info').innerHTML = "<p>Adresse introuvable.</p>";
-                }
-            } catch (erreur) {
-                console.error(erreur);
-                document.getElementById('antenna-info').innerHTML = "<p>Erreur lors de la recherche.</p>";
-            }
-        });
-
-        // Recherche des antennes
-        async function chercherAntennes(lat, lng) {
-            const rayon = 3000; 
-            const url = `https://data.anfr.fr/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&geofilter.distance=${lat},${lng},${rayon}&rows=50`;
-
-            try {
-                const reponse = await fetch(url);
-                const donnees = await reponse.json();
-
-                if (donnees.records.length === 0) {
-                    document.getElementById('antenna-info').innerHTML = "<p>Aucune antenne trouvée dans un rayon de 3km.</p>";
-                    return;
-                }
-
-                document.getElementById('antenna-info').innerHTML = `<i>${donnees.records.length} antennes trouvées ! Cliquez sur les logos sur la carte.</i>`;
-
-                donnees.records.forEach(record => {
-                    if(!record.fields.coordonnees) return;
-                    
-                    const antenneLat = record.fields.coordonnees[0];
-                    const antenneLng = record.fields.coordonnees[1];
-                    const operateur = record.fields.adm_lb_nom || "Inconnu";
-                    const technologie = record.fields.generation || "Non précisée";
-
-                    const icone = getIconOperateur(operateur);
-
-                    let marqueur;
-                    if (icone) {
-                        marqueur = L.marker([antenneLat, antenneLng], { icon: icone }).addTo(markers);
-                    } else {
-                        // Si c'est un autre opérateur (SNCF, etc.), on garde un point gris
-                        marqueur = L.circleMarker([antenneLat, antenneLng], { color: "#888", radius: 8 }).addTo(markers);
-                    }
-
-                    marqueur.on('click', () => {
-                        document.getElementById('antenna-info').innerHTML = `
-                            <h3 style="margin-top:0;">${operateur}</h3>
-                            <p><b>Réseaux :</b> ${technologie}</p>
-                            <p><i>Antenne en service.</i></p>
-                        `;
-                    });
-                });
-
-            } catch (erreur) {
-                document.getElementById('antenna-info').innerHTML = "<p style='color:red;'>Erreur serveur.</p>";
-            }
-        }
-    </script>
+    <script src="auth.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
