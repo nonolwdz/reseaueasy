@@ -91,23 +91,19 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (Version optimisée sans Timeout)
+// 7. RÉCUPÉRATION DES ANTENNES (Appel direct officiel sans proxy)
 async function chercherAntennes(lat, lng) {
     const rayon = 10000; // 10 km
     
-    // On demande 30 résultats au lieu de 100 pour éviter l'erreur de Timeout (408)
-    const urlANFR = `https://data.anfr.fr/d4c/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&resource_id=88ef0887-6b0f-4d3f-8545-6d64c8f597da&geofilter.distance=${lat},${lng},${rayon}&rows=30`;
-    
-    const url = `https://api.allorigins.win/get?url=${encodeURIComponent(urlANFR)}`;
+    // L'URL officielle directe trouvée dans tes captures (avec /d4c/ et le bon resource_id)
+    const url = `https://data.anfr.fr/d4c/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&resource_id=88ef0887-6b0f-4d3f-8545-6d64c8f597da&geofilter.distance=${lat},${lng},${rayon}&rows=30`;
 
     try {
         const reponse = await fetch(url);
-        if (!reponse.ok) throw new Error(`Erreur HTTP ${reponse.status}`);
         
-        const wrapper = await reponse.json();
-        if (!wrapper.contents) throw new Error("Contenu vide reçu du serveur.");
+        if (!reponse.ok) throw new Error(`Erreur serveur ${reponse.status}`);
         
-        const donnees = JSON.parse(wrapper.contents);
+        const donnees = await reponse.json();
 
         if (!donnees.records || donnees.records.length === 0) {
             document.getElementById('antenna-info').innerHTML = "<p>Aucune antenne trouvée à moins de 10km.</p>";
