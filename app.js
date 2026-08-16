@@ -87,7 +87,7 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (Avec lecture robuste des coordonnées)
+// 7. RÉCUPÉRATION DES ANTENNES (Avec analyse sécurisée du texte brut)
 async function chercherAntennes(lat, lng) {
     document.getElementById('antenna-info').innerHTML = "<i>Chargement des antennes...</i>";
     
@@ -95,9 +95,14 @@ async function chercherAntennes(lat, lng) {
 
     try {
         const reponse = await fetch(url);
-        if (!reponse.ok) throw new Error(`Erreur serveur ${reponse.status}`);
+        const texteBrut = await reponse.text();
         
-        const donnees = await reponse.json();
+        let donnees;
+        try {
+            donnees = JSON.parse(texteBrut);
+        } catch (e) {
+            throw new Error("Le serveur Netlify renvoie une page d'erreur au lieu du JSON : " + texteBrut.substring(0, 80));
+        }
 
         if (!donnees.records || donnees.records.length === 0) {
             document.getElementById('antenna-info').innerHTML = "<p>Aucune antenne trouvée à moins de 10km.</p>";
@@ -110,9 +115,7 @@ async function chercherAntennes(lat, lng) {
             let antenneLat = null;
             let antenneLng = null;
 
-            // Analyse robuste de toutes les formes possibles de coordonnées dans l'API ANFR
             if (record.geometry && record.geometry.coordinates) {
-                // Format GeoJSON standard : [longitude, latitude]
                 antenneLng = record.geometry.coordinates[0];
                 antenneLat = record.geometry.coordinates[1];
             } else if (record.fields) {
