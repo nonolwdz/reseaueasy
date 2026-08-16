@@ -92,11 +92,15 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (Corrigé avec le Proxy Netlify)
+// 7. RÉCUPÉRATION DES ANTENNES (Solution infaillible avec proxy public)
 async function chercherAntennes(lat, lng) {
     const rayon = 10000; 
-    // On passe par le proxy Netlify (/api-anfr/) au lieu du lien direct pour éviter le blocage CORS
-    const url = `/api-anfr/records/1.0/search/?dataset=observatoire_2g_3g_4g&geofilter.distance=${lat},${lng},${rayon}&rows=100`;
+    
+    // La vraie adresse de l'ANFR
+    const urlANFR = `https://data.anfr.fr/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&geofilter.distance=${lat},${lng},${rayon}&rows=100`;
+    
+    // Le proxy public gratuit (corsproxy.io) qui fait le relais !
+    const url = `https://corsproxy.io/?${encodeURIComponent(urlANFR)}`;
 
     try {
         const reponse = await fetch(url);
@@ -140,6 +144,6 @@ async function chercherAntennes(lat, lng) {
         });
 
     } catch (erreur) {
-        document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur de connexion :</b> Impossible de contacter l'ANFR via le proxy.</p>`;
+        document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur de connexion :</b> Impossible de charger les données.</p>`;
     }
 }
