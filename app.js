@@ -91,12 +91,12 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (Appel direct officiel sans proxy)
+// 7. RÉCUPÉRATION DES ANTENNES (Via la Netlify Function anti-CORS)
 async function chercherAntennes(lat, lng) {
-    const rayon = 10000; // 10 km
+    document.getElementById('antenna-info').innerHTML = "<i>Chargement des antennes via le serveur sécurisé...</i>";
     
-    // L'URL officielle directe trouvée dans tes captures (avec /d4c/ et le bon resource_id)
-    const url = `https://data.anfr.fr/d4c/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&resource_id=88ef0887-6b0f-4d3f-8545-6d64c8f597da&geofilter.distance=${lat},${lng},${rayon}&rows=30`;
+    // On appelle notre propre fonction Netlify créée à l'étape 1
+    const url = `/.netlify/functions/anfr?lat=${lat}&lng=${lng}`;
 
     try {
         const reponse = await fetch(url);
@@ -140,6 +140,10 @@ async function chercherAntennes(lat, lng) {
         });
 
     } catch (erreur) {
+        console.error("Erreur technique:", erreur);
+        document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur technique :</b> ${erreur.message}</p>`;
+    }
+}
         console.error("Erreur technique:", erreur);
         document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur technique :</b> ${erreur.message}</p>`;
     }
