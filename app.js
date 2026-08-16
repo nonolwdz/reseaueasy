@@ -85,29 +85,74 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 3. RÉCUPÉRATION DES ANTENNES (Rayon 10km)
+// 3. RÉCUPÉRATION DES ANTENNES (Avec détection d'erreur avancée)
 async function chercherAntennes(lat, lng) {
-    const rayon = 10000; // 10 km (idéal pour capter hors des grandes villes)
+    const rayon = 10000; 
     const url = `https://data.anfr.fr/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&geofilter.distance=${lat},${lng},${rayon}&rows=100`;
 
     try {
+        console.log("Tentative de connexion à l'URL :", url);
+        
         const reponse = await fetch(url);
+        
+        // Si le serveur répond, mais avec une erreur (ex: 404 introuvable)
+        if (!reponse.ok) {
+            throw new Error(`Le serveur de l'ANFR a répondu avec une erreur ${reponse.status}`);
+        }
+
         const donnees = await reponse.json();
 
+        // Si la structure des données a changé ou est introuvable
+        if (!donnees.records) {
+            throw new Error("L'ANFR a répondu, mais les données sont vides ou ont changé de format.");
+        }
+
         if (donnees.records.length === 0) {
-            document.getElementById('antenna-info').innerHTML = "<p>Aucune antenne trouvée à moins de 10km. Vous êtes vraiment au calme !</p>";
+            document.getElementById('antenna-info').innerHTML = "<p>Aucune antenne trouvée à moins de 10km.</p>";
             return;
         }
 
         document.getElementById('antenna-info').innerHTML = `<i>${donnees.records.length} antennes trouvées ! Cliquez sur les logos.</i>`;
 
         donnees.records.forEach(record => {
-            if(!record.fields.coordonnees) return;
+            if(!record.fields || !record.fields.coordonnees) return;
             
             const antenneLat = record.fields.coordonnees[0];
             const antenneLng = record.fields.coordonnees[1];
             const operateur = record.fields.adm_lb_nom || "Inconnu";
             const technologie = record.fields.generation || "";
+
+            let explicationTech = "";
+            if (technologie.includes("5G")) {
+                explicationTech = "⚡ <b>5G (3.5 GHz) :</b> Débit ultra-rapide, mais portée courte. L'antenne doit être proche.";
+            } else if (technologie.includes("4G")) {
+                explicationTech = "🚀 <b>4G (700-2600 MHz) :</b> Excellent compromis. Si c'est du 700 MHz, ça passe très bien à travers les murs !";
+            } else if (technologie.includes("3G") || technologie.includes("2G")) {
+                explicationTech = "📞 <b>2G/3G :</b> Surtout utile pour les appels. Portée très longue.";
+            }
+
+            const icone = getIconOperateur(operateur);
+            let marqueur = icone ? L.marker([antenneLat, antenneLng], { icon: icone }).addTo(markers) 
+                                 : L.circleMarker([antenneLat, antenneLng], { color: "#888", radius: 8 }).addTo(markers);
+
+            marqueur.on('click', () => {
+                document.getElementById('antenna-info').innerHTML = `
+                    <h3 style="margin-top:0;">${operateur}</h3>
+                    <p><b>Réseaux actifs :</b> ${technologie}</p>
+                    <p>${explicationTech}</p>
+                    <p><i>Statut : En service 🟢</i></p>
+                `;
+            });
+        });
+
+    } catch (erreur) {
+        console.error("Détail de l'erreur :", erreur);
+        document.getElementById('antenna-info').innerHTML = `
+            <p style='color:red;'><b>Erreur de connexion :</b> ${erreur.message}</p>
+            <p style='font-size: 0.8em;'><i>Si l'erreur dit "Failed to fetch", essaie de désactiver ton bloqueur de pub ou de publier le site sur Netlify.</i></p>
+        `;
+    }
+}
 
             // Analyse technique pour expliquer à l'utilisateur
             let explicationTech = "";
