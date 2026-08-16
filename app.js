@@ -91,35 +91,40 @@ document.getElementById('btn-search').addEventListener('click', async () => {
     }
 });
 
-// 7. RÉCUPÉRATION DES ANTENNES (Technique JSONP anti-blocage)
-function chercherAntennes(lat, lng) {
-    const rayon = 10000; 
-    
-    // On crée un nom de fonction unique pour la requête
-    const callbackName = 'anfrCallback_' + Math.round(100000 * Math.random());
-    
-    // L'URL de l'ANFR avec le paramètre magique "jsonp"
-    const urlANFR = `https://data.anfr.fr/api/records/1.0/search/?dataset=observatoire_2g_3g_4g&geofilter.distance=${lat},${lng},${rayon}&rows=100&jsonp=${callbackName}`;
-    
-    // On prépare la fonction qui va attraper les données quand elles arriveront
-    window[callbackName] = function(donnees) {
-        // On nettoie la fonction une fois qu'elle a servi
-        delete window[callbackName];
+// 7. RÉCUPÉRATION DES ANTENNES (Nouvelle API V2.1 officielle)
+async function chercherAntennes(lat, lng) {
+    // La nouvelle adresse officielle de l'API de l'État (Opendatasoft V2.1)
+    const url = `https://data.anfr.fr/api/explore/v2.1/catalog/datasets/observatoire_2g_3g_4g/records?where=distance(coordonnees, geom'POINT(${lng} ${lat})', 10km)&limit=100`;
+
+    try {
+        const reponse = await fetch(url);
         
-        if (!donnees || !donnees.records || donnees.records.length === 0) {
+        if (!reponse.ok) {
+            throw new Error(`L'API a répondu avec une erreur ${reponse.status}`);
+        }
+        
+        const donnees = await reponse.json();
+        
+        // Dans la nouvelle API, les données sont dans "results" et plus dans "records"
+        const resultats = donnees.results || [];
+
+        if (resultats.length === 0) {
             document.getElementById('antenna-info').innerHTML = "<p>Aucune antenne trouvée à moins de 10km.</p>";
             return;
         }
 
-        document.getElementById('antenna-info').innerHTML = `<i>${donnees.records.length} antennes trouvées ! Cliquez sur les logos.</i>`;
+        document.getElementById('antenna-info').innerHTML = `<i>${resultats.length} antennes trouvées ! Cliquez sur les logos.</i>`;
 
-        donnees.records.forEach(record => {
-            if(!record.fields || !record.fields.coordonnees) return;
+        resultats.forEach(antenne => {
+            if (!antenne.coordonnees) return;
             
-            const antenneLat = record.fields.coordonnees[0];
-            const antenneLng = record.fields.coordonnees[1];
-            const operateur = record.fields.adm_lb_nom || "Inconnu";
-            const technologie = record.fields.generation || "";
+            // Gestion de la nouvelle structure des coordonnées
+            const antenneLat = antenne.coordonnees.lat !== undefined ? antenne.coordonnees.lat : antenne.coordonnees[0];
+            const antenneLng = antenne.coordonnees.lon !== undefined ? antenne.coordonnees.lon : antenne.coordonnees[1];
+            
+            // Les champs ne sont plus cachés dans ".fields"
+            const operateur = antenne.adm_lb_nom || "Inconnu";
+            const technologie = antenne.generation || "";
 
             let explicationTech = "";
             if (technologie.includes("5G")) explicationTech = "⚡ <b>5G (3.5 GHz) :</b> Débit ultra-rapide, mais portée courte.";
@@ -139,16 +144,9 @@ function chercherAntennes(lat, lng) {
                 `;
             });
         });
-    };
 
-    // On injecte le script dans la page (ça passe à travers tous les blocages CORS)
-    const script = document.createElement('script');
-    script.src = urlANFR;
-    
-    // Si même ça c'est bloqué, c'est que ton réseau ou pare-feu interdit l'accès au site de l'État
-    script.onerror = function() {
-        document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur réseau :</b> Impossible de joindre l'ANFR. Ton pare-feu ou antivirus bloque le site de l'État.</p>`;
-    };
-    
-    document.body.appendChild(script);
+    } catch (erreur) {
+        console.error(erreur);
+        document.getElementById('antenna-info').innerHTML = `<p style='color:red;'><b>Erreur de connexion :</b> Impossible de charger les données de l'ANFR.</p>`;
+    }
 }
